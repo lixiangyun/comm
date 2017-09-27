@@ -1,7 +1,7 @@
 package main
 
 import (
-	"golang_demo/socket/comm"
+	"comm"
 	"log"
 	"os"
 	"runtime"
@@ -15,12 +15,12 @@ const (
 
 var flag chan int
 
-var servertable map[uint32]*comm.Server
-var clienttable map[uint32]*comm.Client
+var servertable []*comm.Server
+var client *comm.Client
 
-func serverhandler(userid uint32, channel uint32, body []byte) {
+func serverhandler(s *comm.Server, reqid uint32, body []byte) {
 
-	err := servertable[userid].SendMsg(channel, body)
+	err := s.SendMsg(reqid, body)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -130,47 +130,42 @@ func netstat_server() {
 
 func Server() {
 
-	servertable = make(map[uint32]*comm.Server, 1000)
+	var index int
+	servertable = make([]*comm.Server, 1000)
 
 	list := comm.NewListen(":" + PORT)
 
 	go netstat_server()
 
-	var server *comm.Server
-	var err error
-
 	for {
-		server, err = list.Accept()
+		server, err := list.Accept()
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
 		server.RegHandler(0, serverhandler)
 
-		servertable[server.UserId] = server
+		servertable[index] = server
+		index++
 
-		go server.Run()
+		server.Start(1)
 	}
 }
 
-func clienthandler(userid uint32, channel uint32, body []byte) {
+func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 	recvmsgcnt++
 	recvmsgsize += len(body)
 }
 
 func Client() {
 
-	clienttable = make(map[uint32]*comm.Client, 1000)
-
 	flag = make(chan int)
 
 	c := comm.NewClient(IP + ":" + PORT)
-
 	c.RegHandler(0, clienthandler)
 
-	clienttable[c.UserId] = c
+	c.Start(1)
 
-	go c.Run()
 	go netstat_client()
 
 	var sendbuf [comm.MAX_BUF_SIZE]byte
