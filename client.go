@@ -2,87 +2,77 @@ package comm
 
 import (
 	"errors"
+	"log"
 	"net"
 	"sync"
 )
 
+type ClientHandler func(c *Client, reqid uint32, body []byte)
+
 type Client struct {
 	addr    string
-	conn    net.Conn
-	UserId  uint32
+	conn    *connect
+	handler map[uint32]ClientHandler
 	wait    sync.WaitGroup
-	handler map[uint32]Handler
-	sendbuf chan []byte
 }
 
-var id uint32
-
 func NewClient(addr string) *Client {
-	c := Client{addr: addr, UserId: id}
-
-	id++
-
-	c.sendbuf = make(chan []byte, 1000)
-	c.handler = make(map[uint32]Handler, 100)
-
+	c := Client{addr: addr}
+	c.handler = make(map[uint32]ClientHandler, 100)
 	return &c
 }
 
-func (s *Client) RegHandler(channel uint32, fun Handler) error {
-
-	_, b := s.handler[channel]
+func (s *Client) RegHandler(reqid uint32, fun ClientHandler) error {
+	_, b := s.handler[reqid]
 	if b == true {
 		return errors.New("channel has been register!")
 	}
-
-	s.handler[channel] = fun
-
+	s.handler[reqid] = fun
 	return nil
 }
 
-func (c *Client) Run() error {
+func msgprocess_client(c *Client) {
+
+	defer c.wait.Done()
+
+	for {
+		msg, b := <-c.conn.recvbuf
+		if b == false {
+			return
+		}
+
+		fun, b := c.handler[msg.ReqID]
+		if b == false {
+			log.Println("can not found [", msg.ReqID, "] handler!")
+		} else {
+			fun(c, msg.ReqID, msg.Body)
+		}
+	}
+}
+
+func (c *Client) Start(num int) error {
 
 	conn, err := net.Dial("tcp", c.addr)
 	if err != nil {
 		return err
 	}
 
-	c.conn = conn
+	c.conn = NewConnect(conn, 1000)
 
-	c.wait.Add(2)
-	go socketsend(c.UserId, c.conn, c.sendbuf, &c.wait)
-	go socketrecv(c.UserId, c.conn, c.handler, &c.wait)
-	c.wait.Wait()
-
-	return nil
-}
-
-func (c *Client) Stop() error {
-
-	err := c.conn.Close()
-	if err != nil {
-		return err
+	c.wait.Add(num)
+	for i := 0; i < num; i++ {
+		go msgprocess_client(c)
 	}
 
 	return nil
 }
 
-func (c *Client) SendMsg(channel uint32, body []byte) error {
+func (c *Client) Stop() {
+	c.conn.WaitClose()
+	c.wait.Done()
+}
 
-	var msghead msgHeader
-
-	msghead.BodySize = uint32(len(body))
-	msghead.Channel = channel
-	msghead.MagicId = MAGIC_FLAG
-
-	buftemp, err := codeMsgHeader(msghead)
-	if err != nil {
-		return err
-	}
-
-	buftemp = append(buftemp, body...)
-
-	c.sendbuf <- buftemp
-
+func (c *Client) SendMsg(reqid uint32, body []byte) error {
+	c.conn.sendbuf <- Header{ReqID: reqid, Body: body}
 	return nil
 }
