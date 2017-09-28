@@ -18,7 +18,7 @@ type Client struct {
 
 func NewClient(addr string) *Client {
 	c := Client{addr: addr}
-	c.handler = make(map[uint32]ClientHandler, 100)
+	c.handler = make(map[uint32]ClientHandler, 10)
 	return &c
 }
 
@@ -70,6 +70,7 @@ func (c *Client) Start(num int) error {
 func (c *Client) Stop() {
 	c.conn.WaitClose()
 	c.wait.Done()
+	log.Println("client close.")
 }
 
 func (c *Client) SendMsg(reqid uint32, body []byte) error {
