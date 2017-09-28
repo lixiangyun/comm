@@ -46,7 +46,7 @@ type banchmark struct {
 	recvmsgsize int
 }
 
-var banchmarktest [100]banchmark
+var banchmarktest [32]banchmark
 
 func netstat_client() {
 
@@ -76,6 +76,12 @@ func netstat_client() {
 
 		banchmarktest[num].sendbuflen = sendbuflen
 		banchmarktest[num].recvmsgsize = recvmsgsize - lastrecvmsgsize
+
+		if sendbuflen*2 < comm.MAX_BUF_SIZE/2 {
+			sendbuflen = sendbuflen * 2
+		} else {
+			sendbuflen = 128
+		}
 
 		num++
 
