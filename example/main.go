@@ -46,7 +46,8 @@ type banchmark struct {
 	recvmsgsize int
 }
 
-var banchmarktest [32]banchmark
+var bexit bool
+var banchmarktest [10]banchmark
 
 func netstat_client() {
 
@@ -103,6 +104,7 @@ func netstat_client() {
 			v.sendbuflen, float32(v.recvmsgsize)/(1024*1024))
 	}
 
+	bexit = true
 	flag <- 0
 }
 
@@ -154,7 +156,7 @@ func Server() {
 		servertable[index] = server
 		index++
 
-		server.Start(1)
+		server.Start(4)
 	}
 }
 
@@ -170,7 +172,7 @@ func Client() {
 	c := comm.NewClient(IP + ":" + PORT)
 	c.RegHandler(0, clienthandler)
 
-	c.Start(1)
+	c.Start(3)
 
 	go netstat_client()
 
@@ -184,6 +186,10 @@ func Client() {
 		}
 		sendmsgcnt++
 		sendmsgsize += sendbuflen
+
+		if bexit == true {
+			break
+		}
 	}
 
 	<-flag

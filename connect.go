@@ -51,6 +51,7 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 }
 
 func (c *connect) WaitClose() {
+	c.conn.Close()
 	c.wait.Done()
 }
 
