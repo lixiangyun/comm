@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"os"
 	"sync"
 )
 
@@ -166,7 +165,10 @@ func (c *connect) recvtask() {
 				log.Println("body:", buf[lastindex:bodyend])
 				log.Println("bodyFull:", buf[0:totallen])
 
-				os.Exit(11)
+				log.Println("shutdown client.")
+
+				c.conn.Close()
+				return
 			}
 
 			if bodyend > totallen {
