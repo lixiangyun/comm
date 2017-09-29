@@ -156,7 +156,7 @@ func Server() {
 		servertable[index] = server
 		index++
 
-		server.Start(4)
+		server.Start(3)
 	}
 }
 
