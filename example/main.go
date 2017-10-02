@@ -10,7 +10,7 @@ import (
 
 const (
 	IP   = "localhost"
-	PORT = "1234"
+	PORT = "6565"
 )
 
 var flag chan int
@@ -31,6 +31,13 @@ func serverhandler(s *comm.Server, reqid uint32, body []byte) {
 
 	sendmsgcnt++
 	sendmsgsize += len(body)
+
+	version := comm.GetUint64(body)
+	if version <= recv_no {
+		log.Println("error! ", version, recv_no)
+	} else {
+		recv_no = version
+	}
 }
 
 var recvmsgcnt int
@@ -156,29 +163,45 @@ func Server() {
 		servertable[index] = server
 		index++
 
-		server.Start(3)
+		server.Start(1)
 	}
 }
+
+var recv_no uint64
 
 func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 	recvmsgcnt++
 	recvmsgsize += len(body)
+
+	version := comm.GetUint64(body)
+
+	if version <= recv_no {
+		log.Println("error! ", version, recv_no)
+	} else {
+		recv_no = version
+	}
 }
 
 func Client() {
+
+	var version uint64
 
 	flag = make(chan int)
 
 	c := comm.NewClient(IP + ":" + PORT)
 	c.RegHandler(0, clienthandler)
 
-	c.Start(3)
+	c.Start(1)
 
 	go netstat_client()
 
 	var sendbuf [comm.MAX_BUF_SIZE]byte
 
 	for {
+
+		version++
+		comm.PutUint64(version, sendbuf[0:])
+
 		err := c.SendMsg(0, sendbuf[0:sendbuflen])
 		if err != nil {
 			log.Println(err.Error())
