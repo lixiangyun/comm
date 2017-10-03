@@ -77,9 +77,8 @@ func (s *Server) Start(num int) error {
 }
 
 func (s *Server) Stop() {
-	s.conn.WaitClose()
+	s.conn.Close()
 	s.wait.Wait()
-	log.Println("shutdown!")
 }
 
 func (s *Server) SendMsg(reqid uint32, body []byte) error {
