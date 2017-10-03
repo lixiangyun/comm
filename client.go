@@ -67,12 +67,13 @@ func (c *Client) Start(num int) error {
 	return nil
 }
 
+// client结构资源销毁
 func (c *Client) Stop() {
-	c.conn.WaitClose()
+	c.conn.Close()
 	c.wait.Done()
-	log.Println("client close.")
 }
 
+// 发送消息结构
 func (c *Client) SendMsg(reqid uint32, body []byte) error {
 	var msg Header
 
