@@ -4,7 +4,7 @@ import (
 	"comm"
 	"log"
 	"os"
-	"runtime"
+	"sync"
 	"time"
 )
 
@@ -13,8 +13,12 @@ const (
 	PORT = "6565"
 )
 
-var flag chan int
+const (
+	MIN_BODY_SIZE = 8
+	MAX_BODY_SIZE = comm.MAX_BUF_SIZE / 2
+)
 
+var flag chan int
 var servertable []*comm.Server
 var client *comm.Client
 
@@ -31,13 +35,6 @@ func serverhandler(s *comm.Server, reqid uint32, body []byte) {
 
 	sendmsgcnt++
 	sendmsgsize += len(body)
-
-	version := comm.GetUint64(body)
-	if version <= recv_no {
-		log.Println("error! ", version, recv_no)
-	} else {
-		recv_no = version
-	}
 }
 
 var recvmsgcnt int
@@ -46,21 +43,22 @@ var recvmsgsize int
 var sendmsgcnt int
 var sendmsgsize int
 
-var sendbuflen = 128
+var sendbuflen = MIN_BODY_SIZE
 
 type banchmark struct {
 	sendbuflen  int
-	recvmsgsize int
+	sendmsgsize int
+	sendmsgcnt  int
 }
 
 var bexit bool
-var banchmarktest [10]banchmark
+var banchmarktest [32]banchmark
 
-func netstat_client() {
+func netstat_client(exit *sync.WaitGroup) {
+
+	defer exit.Done()
 
 	num := 0
-
-	time.Sleep(time.Second)
 
 	log.Println("banch mark test start...")
 
@@ -83,12 +81,13 @@ func netstat_client() {
 			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
 
 		banchmarktest[num].sendbuflen = sendbuflen
-		banchmarktest[num].recvmsgsize = recvmsgsize - lastrecvmsgsize
+		banchmarktest[num].sendmsgsize = recvmsgsize - lastrecvmsgsize
+		banchmarktest[num].sendmsgcnt = sendmsgcnt - lastsendmsgcnt
 
-		if sendbuflen*2 < comm.MAX_BUF_SIZE/2 {
+		if sendbuflen*2 < MAX_BODY_SIZE {
 			sendbuflen = sendbuflen * 2
 		} else {
-			sendbuflen = 128
+			sendbuflen = MIN_BODY_SIZE
 		}
 
 		num++
@@ -106,13 +105,13 @@ func netstat_client() {
 	}
 
 	for _, v := range banchmarktest {
-
-		log.Printf("SendBufLen %d , %.3f MB/s \r\n",
-			v.sendbuflen, float32(v.recvmsgsize)/(1024*1024))
+		log.Printf("bufLen %d , cnt %d , size %.3f MB/s \r\n",
+			v.sendbuflen,
+			v.sendmsgcnt,
+			float32(v.sendmsgsize)/(1024*1024))
 	}
 
 	bexit = true
-	flag <- 0
 }
 
 func netstat_server() {
@@ -144,14 +143,8 @@ func netstat_server() {
 }
 
 func Server() {
-
-	var index int
-	servertable = make([]*comm.Server, 1000)
-
 	list := comm.NewListen(":" + PORT)
-
 	go netstat_server()
-
 	for {
 		server, err := list.Accept()
 		if err != nil {
@@ -159,10 +152,6 @@ func Server() {
 			return
 		}
 		server.RegHandler(0, serverhandler)
-
-		servertable[index] = server
-		index++
-
 		server.Start(1)
 	}
 }
@@ -170,6 +159,7 @@ func Server() {
 var recv_no uint64
 
 func clienthandler(c *comm.Client, reqid uint32, body []byte) {
+
 	recvmsgcnt++
 	recvmsgsize += len(body)
 
@@ -185,15 +175,16 @@ func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 func Client() {
 
 	var version uint64
+	var exit sync.WaitGroup
 
 	flag = make(chan int)
 
-	c := comm.NewClient(IP + ":" + PORT)
-	c.RegHandler(0, clienthandler)
+	client := comm.NewClient(IP + ":" + PORT)
+	client.RegHandler(0, clienthandler)
+	client.Start(1)
 
-	c.Start(1)
-
-	go netstat_client()
+	exit.Add(1)
+	go netstat_client(&exit)
 
 	var sendbuf [comm.MAX_BUF_SIZE]byte
 
@@ -202,11 +193,12 @@ func Client() {
 		version++
 		comm.PutUint64(version, sendbuf[0:])
 
-		err := c.SendMsg(0, sendbuf[0:sendbuflen])
+		err := client.SendMsg(0, sendbuf[0:sendbuflen])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
+
 		sendmsgcnt++
 		sendmsgsize += sendbuflen
 
@@ -215,14 +207,12 @@ func Client() {
 		}
 	}
 
-	<-flag
+	exit.Wait()
 
-	c.Stop()
+	client.Stop()
 }
 
 func main() {
-
-	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	args := os.Args
 
