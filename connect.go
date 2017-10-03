@@ -8,32 +8,32 @@ import (
 )
 
 const (
-	MAX_BUF_SIZE = 128 * 1024
-	MAGIC_FLAG   = 0x98b7f30a
-	MSG_HEAD_LEN = 3 * 4
+	MAX_BUF_SIZE = 128 * 1024 // 缓冲区大小(单位：byte)
+	MAGIC_FLAG   = 0x98b7f30a // 校验魔术字
+	MSG_HEAD_LEN = 3 * 4      // 消息头长度
 )
 
 type Header struct {
-	ReqID uint32
-	Body  []byte
+	ReqID uint32 // 请求ID
+	Body  []byte // 传输内容
 }
 
 type msgHeader struct {
-	Flag  uint32
-	ReqID uint32
-	Size  uint32
-	Body  []byte
+	Flag  uint32 // 魔术字
+	ReqID uint32 // 请求ID
+	Size  uint32 // 内容长度
+	Body  []byte // 传输的内容
 }
 
 type connect struct {
-	conn net.Conn
-
-	wait sync.WaitGroup
-
-	sendbuf chan Header
-	recvbuf chan Header
+	conn    net.Conn       // 链路结构
+	wait    sync.WaitGroup // 同步等待退出
+	exit    chan bool      // 退出通道
+	sendbuf chan Header    // 发送缓冲队列
+	recvbuf chan Header    // 接收缓冲队列
 }
 
+// 申请链路操作资源
 func NewConnect(conn net.Conn, buflen int) *connect {
 
 	c := new(connect)
@@ -41,6 +41,7 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 	c.conn = conn
 	c.sendbuf = make(chan Header, buflen)
 	c.recvbuf = make(chan Header, buflen)
+	c.exit = make(chan bool)
 
 	c.wait.Add(2)
 
@@ -50,11 +51,15 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 	return c
 }
 
-func (c *connect) WaitClose() {
+// 链路资源销毁操作
+func (c *connect) Close() {
 	c.conn.Close()
 	c.wait.Done()
+	close(c.recvbuf)
+	close(c.sendbuf)
 }
 
+// 发送调度协成
 func (c *connect) sendtask() {
 
 	defer c.wait.Done()
@@ -63,8 +68,15 @@ func (c *connect) sendtask() {
 	for {
 
 		var buflen int
+		var msg Header
 
-		msg := <-c.sendbuf
+		select {
+		case msg = <-c.sendbuf:
+		case <-c.exit:
+			{
+				return
+			}
+		}
 
 		size := len(msg.Body)
 		tmpbuf := make([]byte, MSG_HEAD_LEN+size)
@@ -126,6 +138,7 @@ func (c *connect) sendtask() {
 	}
 }
 
+// 接收调度协成
 func (c *connect) recvtask() {
 
 	var buf [MAX_BUF_SIZE]byte
@@ -169,8 +182,7 @@ func (c *connect) recvtask() {
 				log.Println("bodybegin:", bodybegin, " bodyend:", bodyend)
 				log.Println("body:", buf[lastindex:bodyend])
 				log.Println("bodyFull:", buf[0:totallen])
-
-				log.Println("shutdown client.")
+				log.Println("close connect.")
 
 				c.conn.Close()
 				return
@@ -196,6 +208,7 @@ func (c *connect) recvtask() {
 	}
 }
 
+// 发送封装的接口
 func fullywrite(conn net.Conn, buf []byte) error {
 
 	totallen := len(buf)
