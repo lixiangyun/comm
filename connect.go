@@ -26,6 +26,7 @@ type msgHeader struct {
 }
 
 type connect struct {
+	bflag   bool
 	conn    net.Conn       // 链路结构
 	wait    sync.WaitGroup // 同步等待退出
 	exit    chan bool      // 退出通道
@@ -33,18 +34,42 @@ type connect struct {
 	recvbuf chan Header    // 接收缓冲队列
 }
 
+func (c *connect) SendBuf(msg Header) error {
+	if c.bflag == false {
+		return errors.New("connect close.")
+	} else {
+		c.sendbuf <- msg
+		return nil
+	}
+}
+
+func (c *connect) RecvBuf() (Header, error) {
+	var msg Header
+
+	select {
+	case msg = <-c.recvbuf:
+		{
+			return msg, nil
+		}
+	case <-c.exit:
+		{
+			return msg, errors.New("connect close.")
+		}
+	}
+}
+
 // 申请链路操作资源
 func NewConnect(conn net.Conn, buflen int) *connect {
 
 	c := new(connect)
 
+	c.bflag = true
 	c.conn = conn
 	c.sendbuf = make(chan Header, buflen)
 	c.recvbuf = make(chan Header, buflen)
 	c.exit = make(chan bool)
 
 	c.wait.Add(2)
-
 	go c.sendtask()
 	go c.recvtask()
 
@@ -53,10 +78,11 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 
 // 链路资源销毁操作
 func (c *connect) Close() {
+	c.exit <- false
+	c.bflag = false
+
 	c.conn.Close()
 	c.wait.Done()
-	close(c.recvbuf)
-	close(c.sendbuf)
 }
 
 // 发送调度协成
@@ -74,6 +100,7 @@ func (c *connect) sendtask() {
 		case msg = <-c.sendbuf:
 		case <-c.exit:
 			{
+				log.Println("connect close.")
 				return
 			}
 		}
@@ -152,7 +179,7 @@ func (c *connect) recvtask() {
 
 		recvnum, err := c.conn.Read(buf[totallen:])
 		if err != nil {
-			log.Println(err.Error())
+			log.Println("connect close.")
 			return
 		}
 
@@ -218,11 +245,7 @@ func fullywrite(conn net.Conn, buf []byte) error {
 
 		cnt, err := conn.Write(buf[sendcnt:])
 		if err != nil {
-			return err
-		}
-
-		if cnt <= 0 {
-			return errors.New("conn write error!")
+			return errors.New("connect close.")
 		}
 
 		if cnt+sendcnt >= totallen {
