@@ -50,8 +50,10 @@ func msgprocess_server(s *Server) {
 	defer s.wait.Done()
 
 	for {
-		msg, b := <-s.conn.recvbuf
-		if b == false {
+
+		msg, err := s.conn.RecvBuf()
+		if err != nil {
+			log.Println(err.Error())
 			return
 		}
 
@@ -82,23 +84,20 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) SendMsg(reqid uint32, body []byte) error {
-
 	var msg Header
 
 	msg.ReqID = reqid
 	msg.Body = make([]byte, len(body))
 	copy(msg.Body, body)
 
-	s.conn.sendbuf <- msg
-
-	return nil
+	return s.conn.SendBuf(msg)
 }
 
 func (s *Server) RegHandler(reqid uint32, fun ServerHandler) error {
 
 	_, b := s.handler[reqid]
 	if b == true {
-		return errors.New("channel has been register!")
+		return errors.New("handler id has been register!")
 	}
 	s.handler[reqid] = fun
 
