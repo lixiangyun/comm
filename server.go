@@ -68,7 +68,7 @@ func msgprocess_server(s *Server) {
 
 func (s *Server) Start(num int) error {
 
-	s.conn = NewConnect(s.socket, 1000)
+	s.conn = NewConnect(s.socket, 10000)
 	s.wait.Add(num)
 
 	for i := 0; i < num; i++ {
