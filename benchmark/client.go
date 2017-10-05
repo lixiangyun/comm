@@ -7,15 +7,22 @@ import (
 	"time"
 )
 
+const (
+	MIN_BODY_SIZE = 8
+	MAX_BODY_SIZE = comm.MAX_BUF_SIZE / 2
+)
+
 var flag chan int
 var clientStat comm.Stat
 
+// 消息发送的body大小
 var sendbuflen = MIN_BODY_SIZE
 
 var bexit bool
 var banchmarktest [32]comm.Stat
 var banchmarkbuflen [32]int
 
+// 客户端消息发送、接收 统计显示
 func netstat_client(exit *sync.WaitGroup) {
 
 	defer exit.Done()
@@ -46,7 +53,7 @@ func netstat_client(exit *sync.WaitGroup) {
 		if sendbuflen*2 < MAX_BODY_SIZE {
 			sendbuflen = sendbuflen * 2
 		} else {
-			sendbuflen = MIN_BODY_SIZE
+			break
 		}
 
 		num++
@@ -72,8 +79,10 @@ func netstat_client(exit *sync.WaitGroup) {
 	bexit = true
 }
 
+// 消息body内容校验码（序列号递增）
 var recv_no uint64
 
+// 客户端消息处理handler
 func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 
 	clientStat.AddCnt(0, 1, 0)
@@ -88,6 +97,7 @@ func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 	}
 }
 
+// 客户端启动、退出函数
 func Client() {
 
 	var version uint64
