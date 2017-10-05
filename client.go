@@ -18,7 +18,7 @@ type Client struct {
 
 func NewClient(addr string) *Client {
 	c := Client{addr: addr}
-	c.handler = make(map[uint32]ClientHandler, 10)
+	c.handler = make(map[uint32]ClientHandler, 100)
 	return &c
 }
 
@@ -36,8 +36,10 @@ func msgprocess_client(c *Client) {
 	defer c.wait.Done()
 
 	for {
-		msg, b := <-c.conn.recvbuf
-		if b == false {
+
+		msg, err := c.conn.RecvBuf()
+		if err != nil {
+			log.Println(err.Error())
 			return
 		}
 
@@ -57,7 +59,7 @@ func (c *Client) Start(num int) error {
 		return err
 	}
 
-	c.conn = NewConnect(conn, 1000)
+	c.conn = NewConnect(conn, 10000)
 
 	c.wait.Add(num)
 	for i := 0; i < num; i++ {
@@ -70,7 +72,7 @@ func (c *Client) Start(num int) error {
 // client结构资源销毁
 func (c *Client) Stop() {
 	c.conn.Close()
-	c.wait.Done()
+	c.wait.Wait()
 }
 
 // 发送消息结构
@@ -80,7 +82,6 @@ func (c *Client) SendMsg(reqid uint32, body []byte) error {
 	msg.ReqID = reqid
 	msg.Body = make([]byte, len(body))
 	copy(msg.Body, body)
-	c.conn.sendbuf <- msg
 
-	return nil
+	return c.conn.SendBuf(msg)
 }
