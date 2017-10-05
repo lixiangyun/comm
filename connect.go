@@ -34,30 +34,6 @@ type connect struct {
 	recvbuf chan Header    // 接收缓冲队列
 }
 
-func (c *connect) SendBuf(msg Header) error {
-	if c.bflag == false {
-		return errors.New("connect close.")
-	} else {
-		c.sendbuf <- msg
-		return nil
-	}
-}
-
-func (c *connect) RecvBuf() (Header, error) {
-	var msg Header
-
-	select {
-	case msg = <-c.recvbuf:
-		{
-			return msg, nil
-		}
-	case <-c.exit:
-		{
-			return msg, errors.New("connect close.")
-		}
-	}
-}
-
 // 申请链路操作资源
 func NewConnect(conn net.Conn, buflen int) *connect {
 
@@ -82,7 +58,7 @@ func (c *connect) Close() {
 	c.bflag = false
 
 	c.conn.Close()
-	c.wait.Done()
+	c.wait.Wait()
 }
 
 // 发送调度协成
@@ -96,6 +72,7 @@ func (c *connect) sendtask() {
 		var buflen int
 		var msg Header
 
+		// 监听消息发送缓存队列
 		select {
 		case msg = <-c.sendbuf:
 		case <-c.exit:
@@ -108,6 +85,7 @@ func (c *connect) sendtask() {
 		size := len(msg.Body)
 		tmpbuf := make([]byte, MSG_HEAD_LEN+size)
 
+		// 序列化报文头
 		PutUint32(MAGIC_FLAG, tmpbuf[0:])
 		PutUint32(msg.ReqID, tmpbuf[4:])
 		PutUint32(uint32(size), tmpbuf[8:])
@@ -126,6 +104,7 @@ func (c *connect) sendtask() {
 			buflen = tmpbuflen
 		}
 
+		// 从消息缓存队列中批量获取消息，并且合并消息一次发送。
 		chanlen := len(c.sendbuf)
 
 		for i := 0; i < chanlen; i++ {
@@ -177,9 +156,10 @@ func (c *connect) recvtask() {
 
 		var lastindex int
 
+		// 从socket读取数据
 		recvnum, err := c.conn.Read(buf[totallen:])
 		if err != nil {
-			log.Println("connect close.")
+			log.Println(err.Error())
 			return
 		}
 
@@ -195,6 +175,7 @@ func (c *connect) recvtask() {
 
 			var msg msgHeader
 
+			// 反序列化报文内容
 			msg.Flag = GetUint32(buf[lastindex:])
 			msg.ReqID = GetUint32(buf[lastindex+4:])
 			msg.Size = GetUint32(buf[lastindex+8:])
@@ -202,6 +183,7 @@ func (c *connect) recvtask() {
 			bodybegin := lastindex + MSG_HEAD_LEN
 			bodyend := bodybegin + int(msg.Size)
 
+			// 校验消息头魔术字
 			if msg.Flag != MAGIC_FLAG {
 
 				log.Println("msghead_0:", msg)
@@ -222,8 +204,8 @@ func (c *connect) recvtask() {
 				break
 			}
 
+			// 构造消息发送至消息队列
 			var tempmsg Header
-
 			tempmsg.ReqID = msg.ReqID
 			tempmsg.Body = make([]byte, len(buf[bodybegin:bodyend]))
 			copy(tempmsg.Body, buf[bodybegin:bodyend])
@@ -237,21 +219,42 @@ func (c *connect) recvtask() {
 
 // 发送封装的接口
 func fullywrite(conn net.Conn, buf []byte) error {
-
 	totallen := len(buf)
 	sendcnt := 0
 
 	for {
-
 		cnt, err := conn.Write(buf[sendcnt:])
 		if err != nil {
-			return errors.New("connect close.")
+			return err
 		}
-
 		if cnt+sendcnt >= totallen {
 			return nil
 		}
-
 		sendcnt += cnt
+	}
+}
+
+// 发送消息至消息缓存队列
+func (c *connect) SendBuf(msg Header) error {
+	if c.bflag == false {
+		return errors.New("connect close.")
+	} else {
+		c.sendbuf <- msg
+		return nil
+	}
+}
+
+// 从接收缓存队列读取消息
+func (c *connect) RecvBuf() (Header, error) {
+	var msg Header
+	select {
+	case msg = <-c.recvbuf:
+		{
+			return msg, nil
+		}
+	case <-c.exit:
+		{
+			return msg, errors.New("connect close.")
+		}
 	}
 }
