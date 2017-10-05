@@ -11,14 +11,10 @@ const (
 	PORT = "6565"
 )
 
-const (
-	MIN_BODY_SIZE = 8
-	MAX_BODY_SIZE = comm.MAX_BUF_SIZE / 2
-)
-
 var serverTable []*comm.Server
 var serverstat comm.Stat
 
+// server消息处理handler
 func serverhandler(s *comm.Server, reqid uint32, body []byte) {
 
 	err := s.SendMsg(reqid, body)
@@ -33,6 +29,7 @@ func serverhandler(s *comm.Server, reqid uint32, body []byte) {
 	serverstat.AddSize(len(body), len(body))
 }
 
+// server端消息处理的统计显示
 func netstat_server() {
 
 	laststat := serverstat
@@ -56,6 +53,7 @@ func netstat_server() {
 	}
 }
 
+// 启动server端，并且监听
 func Server() {
 
 	list := comm.NewListen(":" + PORT)
