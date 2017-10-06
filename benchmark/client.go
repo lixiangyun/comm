@@ -79,35 +79,22 @@ func netstat_client(exit *sync.WaitGroup) {
 	bexit = true
 }
 
-// 消息body内容校验码（序列号递增）
-var recv_no uint64
-
 // 客户端消息处理handler
 func clienthandler(c *comm.Client, reqid uint32, body []byte) {
-
 	clientStat.AddCnt(0, 1, 0)
 	clientStat.AddSize(0, len(body))
-
-	version := comm.GetUint64(body)
-
-	if version <= recv_no {
-		log.Println("error! ", version, recv_no)
-	} else {
-		recv_no = version
-	}
 }
 
 // 客户端启动、退出函数
 func Client() {
 
-	var version uint64
 	var exit sync.WaitGroup
 
 	flag = make(chan int)
 
 	client := comm.NewClient(IP + ":" + PORT)
 	client.RegHandler(0, clienthandler)
-	client.Start(1)
+	client.Start(4, 10000)
 
 	exit.Add(1)
 	go netstat_client(&exit)
@@ -115,9 +102,6 @@ func Client() {
 	var sendbuf [comm.MAX_BUF_SIZE]byte
 
 	for bexit != true {
-
-		version++
-		comm.PutUint64(version, sendbuf[0:])
 
 		err := client.SendMsg(0, sendbuf[0:sendbuflen])
 		if err != nil {
@@ -132,4 +116,5 @@ func Client() {
 	exit.Wait()
 
 	client.Stop()
+	client.Wait()
 }

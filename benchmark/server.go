@@ -16,17 +16,13 @@ var serverstat comm.Stat
 
 // server消息处理handler
 func serverhandler(s *comm.Server, reqid uint32, body []byte) {
-
 	err := s.SendMsg(reqid, body)
 	if err != nil {
-		log.Println(err.Error())
 		serverstat.AddCnt(0, 1, 0)
-
-		return
+	} else {
+		serverstat.AddCnt(1, 1, 0)
+		serverstat.AddSize(len(body), len(body))
 	}
-
-	serverstat.AddCnt(1, 1, 0)
-	serverstat.AddSize(len(body), len(body))
 }
 
 // server端消息处理的统计显示
@@ -64,7 +60,12 @@ func Server() {
 			log.Println(err.Error())
 			return
 		}
+		log.Println("new server instance.")
 		server.RegHandler(0, serverhandler)
-		server.Start(1)
+		go func() {
+			server.Start(4, 10000)
+			server.Wait()
+			log.Println("free server instance.")
+		}()
 	}
 }
