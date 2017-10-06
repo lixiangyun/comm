@@ -16,67 +16,67 @@ RAM: 4GB<br>
     </tr>
     <tr>
         <th>8</th>
-        <th>1069</th>
-        <th>8.532</th>
+        <th>1189</th>
+        <th>9.408</th>
     </tr>
     <tr>
         <th>16</th>
-        <th>921</th>
-        <th>14.777</th>
+        <th>1042</th>
+        <th>16.549</th>
     </tr>
     <tr>
         <th>32</th>
-        <th>897</th>
-        <th>28.683</th>
+        <th>962</th>
+        <th>30.522</th>
     </tr>
     <tr>
         <th>64</th>
         <th>836</th>
-        <th>53.372</th>
+        <th>53.008</th>
     </tr>
     <tr>
         <th>128</th>
-        <th>701</th>
-        <th>89.122</th>
+        <th>737</th>
+        <th>93.288</th>
     </tr>
 	<tr>
         <th>256</th>
-        <th>500</th>
-        <th>126.242</th>
+        <th>544</th>
+        <th>137.22</th>
     </tr>
 	<tr>
         <th>512</th>
-        <th>247</th>
-        <th>124.85</th>
+        <th>296</th>
+        <th>148.663</th>
     </tr>
 	<tr>
         <th>1024</th>
-        <th>116</th>
-        <th>116.882</th>
+        <th>135</th>
+        <th>136.198</th>
     </tr>
 	<tr>
         <th>2048</th>
-        <th>61</th>
-        <th>122.215</th>
+        <th>72</th>
+        <th>145.229</th>
     </tr>
 	<tr>
         <th>4096</th>
-        <th>40</th>
-        <th>161.793</th>
+        <th>41</th>
+        <th>164.289</th>
     </tr>
 	<tr>
         <th>8192</th>
         <th>22</th>
-        <th>177.25</th>
+        <th>178.633</th>
     </tr>
 	<tr>
         <th>16384</th>
         <th>13</th>
-        <th>223.516</th>
+        <th>216.891</th>
     </tr>
 	<tr>
         <th>32768</th>
         <th>9</th>
-        <th>294.281</th>
+        <th>297.125</th>
     </tr>
 </table>
