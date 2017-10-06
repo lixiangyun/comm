@@ -13,11 +13,13 @@ const (
 	MSG_HEAD_LEN = 3 * 4      // 消息头长度
 )
 
+// 消息头
 type Header struct {
 	ReqID uint32 // 请求ID
 	Body  []byte // 传输内容
 }
 
+// 内部传输的报文头
 type msgHeader struct {
 	Flag  uint32 // 魔术字
 	ReqID uint32 // 请求ID
@@ -25,13 +27,15 @@ type msgHeader struct {
 	Body  []byte // 传输的内容
 }
 
+// 链路管理的资源结构
 type connect struct {
-	bflag   bool
-	conn    net.Conn       // 链路结构
-	wait    sync.WaitGroup // 同步等待退出
-	exit    chan bool      // 退出通道
-	sendbuf chan Header    // 发送缓冲队列
-	recvbuf chan Header    // 接收缓冲队列
+	bexit    bool
+	exit     chan bool
+	conn     net.Conn       // 链路结构
+	wait     sync.WaitGroup // 同步等待退出
+	taskexit chan bool      // 退出通道
+	SendBuf  chan Header    // 发送缓冲队列
+	RecvBuf  chan Header    // 接收缓冲队列
 }
 
 // 申请链路操作资源
@@ -39,11 +43,11 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 
 	c := new(connect)
 
-	c.bflag = true
 	c.conn = conn
-	c.sendbuf = make(chan Header, buflen)
-	c.recvbuf = make(chan Header, buflen)
-	c.exit = make(chan bool)
+	c.SendBuf = make(chan Header, buflen)
+	c.RecvBuf = make(chan Header, buflen)
+	c.taskexit = make(chan bool, 10)
+	c.exit = make(chan bool, 10)
 
 	c.wait.Add(2)
 	go c.sendtask()
@@ -52,13 +56,18 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 	return c
 }
 
-// 链路资源销毁操作
-func (c *connect) Close() {
-	c.exit <- false
-	c.bflag = false
-
+// 等待链路资源销毁
+func (c *connect) Wait() {
+	<-c.exit
+	c.bexit = true
+	c.taskexit <- true
 	c.conn.Close()
 	c.wait.Wait()
+}
+
+// 主动发起资源销毁
+func (c *connect) Close() {
+	c.exit <- true
 }
 
 // 发送调度协成
@@ -74,10 +83,9 @@ func (c *connect) sendtask() {
 
 		// 监听消息发送缓存队列
 		select {
-		case msg = <-c.sendbuf:
-		case <-c.exit:
+		case msg = <-c.SendBuf:
+		case <-c.taskexit:
 			{
-				log.Println("connect close.")
 				return
 			}
 		}
@@ -97,6 +105,7 @@ func (c *connect) sendtask() {
 			err := fullywrite(c.conn, tmpbuf[0:])
 			if err != nil {
 				log.Println(err.Error())
+				c.Close()
 				return
 			}
 		} else {
@@ -105,11 +114,11 @@ func (c *connect) sendtask() {
 		}
 
 		// 从消息缓存队列中批量获取消息，并且合并消息一次发送。
-		chanlen := len(c.sendbuf)
+		chanlen := len(c.SendBuf)
 
 		for i := 0; i < chanlen; i++ {
 
-			msg = <-c.sendbuf
+			msg = <-c.SendBuf
 
 			size = len(msg.Body)
 			tmpbuf = make([]byte, MSG_HEAD_LEN+size)
@@ -128,6 +137,7 @@ func (c *connect) sendtask() {
 				err := fullywrite(c.conn, buf[0:buflen])
 				if err != nil {
 					log.Println(err.Error())
+					c.Close()
 					return
 				}
 				buflen = 0
@@ -138,6 +148,7 @@ func (c *connect) sendtask() {
 			err := fullywrite(c.conn, buf[0:buflen])
 			if err != nil {
 				log.Println(err.Error())
+				c.Close()
 				return
 			}
 		}
@@ -152,7 +163,7 @@ func (c *connect) recvtask() {
 
 	defer c.wait.Done()
 
-	for {
+	for c.bexit != true {
 
 		var lastindex int
 
@@ -160,6 +171,7 @@ func (c *connect) recvtask() {
 		recvnum, err := c.conn.Read(buf[totallen:])
 		if err != nil {
 			log.Println(err.Error())
+			c.Close()
 			return
 		}
 
@@ -186,14 +198,14 @@ func (c *connect) recvtask() {
 			// 校验消息头魔术字
 			if msg.Flag != MAGIC_FLAG {
 
-				log.Println("msghead_0:", msg)
+				log.Println("BAD MSG HEAD: ")
+				log.Println("msg head:", msg)
 				log.Println("totallen:", totallen)
 				log.Println("bodybegin:", bodybegin, " bodyend:", bodyend)
 				log.Println("body:", buf[lastindex:bodyend])
 				log.Println("bodyFull:", buf[0:totallen])
-				log.Println("close connect.")
 
-				c.conn.Close()
+				c.Close()
 				return
 			}
 
@@ -210,11 +222,31 @@ func (c *connect) recvtask() {
 			tempmsg.Body = make([]byte, len(buf[bodybegin:bodyend]))
 			copy(tempmsg.Body, buf[bodybegin:bodyend])
 
-			c.recvbuf <- tempmsg
+			c.RecvBuf <- tempmsg
 
 			lastindex = bodyend
 		}
 	}
+}
+
+// 发送消息
+func (c *connect) SendMsg(msg Header) error {
+	if c.bexit == true {
+		return errors.New("connect closed.")
+	} else {
+		c.SendBuf <- msg
+		return nil
+	}
+}
+
+// 获取远端地址
+func (c *connect) RemoteAddr() string {
+	return c.conn.RemoteAddr().String()
+}
+
+// 获取本地地址
+func (c *connect) LocalAddr() string {
+	return c.conn.LocalAddr().String()
 }
 
 // 发送封装的接口
@@ -231,30 +263,5 @@ func fullywrite(conn net.Conn, buf []byte) error {
 			return nil
 		}
 		sendcnt += cnt
-	}
-}
-
-// 发送消息至消息缓存队列
-func (c *connect) SendBuf(msg Header) error {
-	if c.bflag == false {
-		return errors.New("connect close.")
-	} else {
-		c.sendbuf <- msg
-		return nil
-	}
-}
-
-// 从接收缓存队列读取消息
-func (c *connect) RecvBuf() (Header, error) {
-	var msg Header
-	select {
-	case msg = <-c.recvbuf:
-		{
-			return msg, nil
-		}
-	case <-c.exit:
-		{
-			return msg, errors.New("connect close.")
-		}
 	}
 }
