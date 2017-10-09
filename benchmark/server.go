@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// 服务端IP
 const (
 	IP   = "localhost"
 	PORT = "6565"
@@ -63,7 +64,7 @@ func Server() {
 		log.Println("new server instance.")
 		server.RegHandler(0, serverhandler)
 		go func() {
-			server.Start(4, 10000)
+			server.Start(4, 1000)
 			server.Wait()
 			log.Println("free server instance.")
 		}()
