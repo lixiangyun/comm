@@ -92,17 +92,19 @@ func Client() {
 
 	flag = make(chan int)
 
+	// 启动客户端，并且注册消息处理函数
 	client := comm.NewClient(IP + ":" + PORT)
 	client.RegHandler(0, clienthandler)
-	client.Start(4, 10000)
+	client.Start(4, 1000)
 
 	exit.Add(1)
+	// 创建统计协程
 	go netstat_client(&exit)
 
 	var sendbuf [comm.MAX_BUF_SIZE]byte
 
 	for bexit != true {
-
+		// 发送消息，并且进行统计
 		err := client.SendMsg(0, sendbuf[0:sendbuflen])
 		if err != nil {
 			log.Println(err.Error())
@@ -113,8 +115,10 @@ func Client() {
 		clientStat.AddSize(sendbuflen, 0)
 	}
 
+	// 等待协程退出
 	exit.Wait()
 
+	// 销毁client资源
 	client.Stop()
 	client.Wait()
 }
