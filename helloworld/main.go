@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+// 进程启动入口
 func main() {
 	args := os.Args
 	if len(args) < 2 {
