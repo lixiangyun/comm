@@ -1,8 +1,9 @@
 package main
 
 import (
-	"comm"
 	"log"
+
+	"github.com/lixiangyun/comm"
 )
 
 const (

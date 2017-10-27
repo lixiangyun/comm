@@ -1,9 +1,10 @@
 package main
 
 import (
-	"comm"
 	"log"
 	"time"
+
+	"github.com/lixiangyun/comm"
 )
 
 // 服务端IP

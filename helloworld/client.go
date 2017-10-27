@@ -1,9 +1,10 @@
 package main
 
 import (
-	"comm"
 	"log"
 	"time"
+
+	"github.com/lixiangyun/comm"
 )
 
 func clienthandler(c *comm.Client, reqid uint32, body []byte) {

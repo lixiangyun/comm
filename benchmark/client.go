@@ -1,10 +1,11 @@
 package main
 
 import (
-	"comm"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/lixiangyun/comm"
 )
 
 const (
