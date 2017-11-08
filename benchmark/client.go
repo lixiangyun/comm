@@ -87,14 +87,16 @@ func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 }
 
 // 客户端启动、退出函数
-func Client() {
+func Client(addr string) {
+
+	log.Println("connect : ", addr)
 
 	var exit sync.WaitGroup
 
 	flag = make(chan int)
 
 	// 启动客户端，并且注册消息处理函数
-	client := comm.NewClient(IP + ":" + PORT)
+	client := comm.NewClient(addr)
 	client.RegHandler(0, clienthandler)
 	client.Start(4, 1000)
 
