@@ -7,12 +7,6 @@ import (
 	"github.com/lixiangyun/comm"
 )
 
-// 服务端IP
-const (
-	IP   = "localhost"
-	PORT = "6565"
-)
-
 var serverTable []*comm.Server
 var serverstat comm.Stat
 
@@ -52,9 +46,11 @@ func netstat_server() {
 }
 
 // 启动server端，并且监听
-func Server() {
+func Server(addr string) {
 
-	list := comm.NewListen(":" + PORT)
+	log.Println("listen : ", addr)
+
+	list := comm.NewListen(addr)
 	go netstat_server()
 	for {
 		server, err := list.Accept()
