@@ -1,9 +1,11 @@
 package comm
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net"
+	"runtime/debug"
 	"sync"
 )
 
@@ -29,13 +31,15 @@ type msgHeader struct {
 
 // 链路管理的资源结构
 type connect struct {
-	bexit    bool
-	exit     chan bool
-	conn     net.Conn       // 链路结构
-	wait     sync.WaitGroup // 同步等待退出
-	taskexit chan bool      // 退出通道
-	SendBuf  chan Header    // 发送缓冲队列
-	RecvBuf  chan Header    // 接收缓冲队列
+	bexit bool
+
+	conn net.Conn       // 链路结构
+	wait sync.WaitGroup // 同步等待退出
+
+	SendBuf chan Header // 发送缓冲队列
+	RecvBuf chan Header // 接收缓冲队列
+
+	cancel context.CancelFunc
 }
 
 // 申请链路操作资源
@@ -46,11 +50,14 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 	c.conn = conn
 	c.SendBuf = make(chan Header, buflen)
 	c.RecvBuf = make(chan Header, buflen)
-	c.taskexit = make(chan bool, 10)
-	c.exit = make(chan bool, 10)
 
 	c.wait.Add(2)
-	go c.sendtask()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c.cancel = cancel
+
+	go c.sendtask(ctx)
 	go c.recvtask()
 
 	return c
@@ -58,16 +65,16 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 
 // 等待链路资源销毁
 func (c *connect) Wait() {
-	<-c.exit
-	c.bexit = true
-	c.taskexit <- true
-	c.conn.Close()
 	c.wait.Wait()
+	log.Println("connect failed!")
 }
 
 // 主动发起资源销毁
 func (c *connect) Close() {
-	c.exit <- true
+	c.conn.Close()
+	c.bexit = true
+
+	debug.PrintStack()
 }
 
 // 序列化报文头
@@ -96,9 +103,11 @@ func decoderMsg(regid uint32, body []byte) Header {
 }
 
 // 发送调度协成
-func (c *connect) sendtask() {
+func (c *connect) sendtask(ctx context.Context) {
 
+	defer c.Close()
 	defer c.wait.Done()
+
 	var buf [MAX_BUF_SIZE]byte
 
 	for {
@@ -109,7 +118,7 @@ func (c *connect) sendtask() {
 		// 监听消息发送缓存队列
 		select {
 		case msg = <-c.SendBuf:
-		case <-c.taskexit:
+		case <-ctx.Done():
 			{
 				return
 			}
@@ -122,7 +131,6 @@ func (c *connect) sendtask() {
 			err := fullywrite(c.conn, tmpbuf[0:])
 			if err != nil {
 				log.Println(err.Error())
-				c.Close()
 				return
 			}
 		} else {
@@ -147,7 +155,6 @@ func (c *connect) sendtask() {
 				err := fullywrite(c.conn, buf[0:buflen])
 				if err != nil {
 					log.Println(err.Error())
-					c.Close()
 					return
 				}
 				buflen = 0
@@ -158,7 +165,6 @@ func (c *connect) sendtask() {
 			err := fullywrite(c.conn, buf[0:buflen])
 			if err != nil {
 				log.Println(err.Error())
-				c.Close()
 				return
 			}
 		}
@@ -171,9 +177,10 @@ func (c *connect) recvtask() {
 	var buf [MAX_BUF_SIZE]byte
 	var totallen int
 
+	defer c.Close()
 	defer c.wait.Done()
 
-	for c.bexit != true {
+	for {
 
 		var lastindex int
 
@@ -181,7 +188,6 @@ func (c *connect) recvtask() {
 		recvnum, err := c.conn.Read(buf[totallen:])
 		if err != nil {
 			log.Println(err.Error())
-			c.Close()
 			return
 		}
 
@@ -206,13 +212,12 @@ func (c *connect) recvtask() {
 			// 校验消息头魔术字
 			if Flag != MAGIC_FLAG {
 
-				log.Println("BadMsg:")
+				log.Println("Recv Bad Msg: ")
 				log.Println("TotalLen:", totallen)
 				log.Println("BodyBegin:", bodybegin, " bodyend:", bodyend)
 				log.Println("Body:", buf[lastindex:bodyend])
 				log.Println("BodyFull:", buf[0:totallen])
 
-				c.Close()
 				return
 			}
 

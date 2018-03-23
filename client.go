@@ -66,7 +66,6 @@ func msgprocess_client(c *Client) {
 
 // 启动客户端处理
 func (c *Client) Start(num, buflen int) error {
-
 	conn, err := net.Dial("tcp", c.addr)
 	if err != nil {
 		return err
