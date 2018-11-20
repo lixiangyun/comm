@@ -1,6 +1,8 @@
 # comm
 Message communication SDK base on golang
 
+![](https://travis-ci.com/lixiangyun/comm.svg?branch=master)
+
 ## 性能测试
 ### 测试环境
 CPU: Intel(R)Core(TM)m3-6y30 CPU@ 0.9GHz 1.51GHz<br>
