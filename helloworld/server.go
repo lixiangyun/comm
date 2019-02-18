@@ -7,8 +7,11 @@ import (
 )
 
 const (
-	IP   = "localhost"
-	PORT = "6565"
+	IP          = "127.0.0.1"
+	PORT        = "6565"
+	CA          = "./crt/ca.crt"
+	SERVER_CERT = "./crt/server.crt"
+	SERVER_KEY  = "./crt/server.pem"
 )
 
 func serverhandler(s *comm.Server, reqid uint32, body []byte) {
@@ -23,6 +26,9 @@ func serverhandler(s *comm.Server, reqid uint32, body []byte) {
 
 func Server() {
 	listen := comm.NewListen(":" + PORT)
+
+	listen.TlsEnable(CA, SERVER_CERT, SERVER_KEY)
+
 	for {
 		server, err := listen.Accept()
 		if err != nil {

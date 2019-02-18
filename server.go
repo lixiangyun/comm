@@ -1,7 +1,10 @@
 package comm
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -23,7 +26,8 @@ type Server struct {
 
 // 服务端监听资源结构
 type Listen struct {
-	listen net.Listener
+	listen    net.Listener
+	tlsconfig *tls.Config
 }
 
 // 监听地址
@@ -38,6 +42,34 @@ func NewListen(addr string) *Listen {
 	return &Listen{listen: listen}
 }
 
+func (l *Listen) TlsEnable(ca, cert, key string) error {
+
+	//这里读取的是根证书
+	buf, err := ioutil.ReadFile(ca)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+
+	cert_ca_pool := x509.NewCertPool()
+	cert_ca_pool.AppendCertsFromPEM(buf)
+
+	//加载服务端证书
+	cert_cfg, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+
+	l.tlsconfig = &tls.Config{
+		Certificates: []tls.Certificate{cert_cfg},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    cert_ca_pool,
+	}
+
+	return nil
+}
+
 // 分配一个服务端实例
 func (l *Listen) Accept() (*Server, error) {
 
@@ -48,8 +80,13 @@ func (l *Listen) Accept() (*Server, error) {
 	}
 
 	s := new(Server)
-	s.socket = conn
 	s.handler = make(map[uint32]ServerHandler, 100)
+
+	if l.tlsconfig != nil {
+		s.socket = tls.Server(conn, l.tlsconfig)
+	} else {
+		s.socket = conn
+	}
 
 	return s, nil
 }
@@ -81,6 +118,7 @@ func msgprocess_server(s *Server) {
 
 // 启动消息处理任务
 func (s *Server) Start(num, buflen int) error {
+
 	s.conn = NewConnect(s.socket, buflen)
 	s.wait.Add(num)
 	s.tasknum = num

@@ -5,7 +5,8 @@ import (
 	"errors"
 	"log"
 	"net"
-	"runtime/debug"
+
+	//	"runtime/debug"
 	"sync"
 )
 
@@ -66,15 +67,16 @@ func NewConnect(conn net.Conn, buflen int) *connect {
 // 等待链路资源销毁
 func (c *connect) Wait() {
 	c.wait.Wait()
-	log.Println("connect failed!")
+	log.Println("connect close!")
 }
 
 // 主动发起资源销毁
 func (c *connect) Close() {
 	c.conn.Close()
+	c.cancel()
 	c.bexit = true
 
-	debug.PrintStack()
+	//debug.PrintStack()
 }
 
 // 序列化报文头

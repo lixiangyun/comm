@@ -7,6 +7,11 @@ import (
 	"github.com/lixiangyun/comm"
 )
 
+const (
+	CLIENT_CERT = "./crt/client.crt"
+	CLIENT_KEY  = "./crt/client.pem"
+)
+
 func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 	log.Println(string(body))
 }
@@ -14,6 +19,7 @@ func clienthandler(c *comm.Client, reqid uint32, body []byte) {
 func Client() {
 
 	client := comm.NewClient(IP + ":" + PORT)
+	client.TlsEnable(CA, CLIENT_CERT, CLIENT_KEY)
 	client.RegHandler(0, clienthandler)
 	client.Start(1, 10)
 
